@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>todoCESPED | Plataforma Logística</title>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root {
+            --verde-cesped: #99c217; --verde-suave: #f1f8e8;
+            --verde-borde: #8cb80f; 
+            --rojo-alerta: #e74c3c; --rojo-suave: #fdeaea;
+            --gris-texto: #64748b;
+            --complementos-bg: #e2e8f0; --complementos-text: #475569; 
+            --fondo: #f8fafc; --texto: #1e293b;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        body { font-family: 'Ubuntu', sans-serif; background: var(--fondo); color: var(--texto); margin: 0; padding: 15px; display: flex; justify-content: center; }
+        .container { max-width: 1400px; width: 100%; text-align: center; }
+
+        header { background: white; padding: 15px 30px; border-radius: 12px; box-shadow: var(--shadow); border-top: 6px solid var(--verde-cesped); margin-bottom: 15px; display: flex; justify-content: center; align-items: center; cursor: pointer; transition: background 0.2s; }
+        header:hover { background: #f8fafc; }
+        .header-content { display: flex; align-items: center; gap: 15px; }
+        
+        .tabs { display: flex; justify-content: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .tab-btn { padding: 10px 20px; font-family: 'Ubuntu'; font-weight: 700; border: none; border-radius: 8px; cursor: pointer; background: #e2e8f0; color: #64748b; transition: 0.2s; }
+        .tab-btn.active { background: var(--verde-cesped); color: white; box-shadow: var(--shadow); }
+        .vista { display: none; } .vista.active { display: block; }
+
+        /* TABLA DE STOCK */
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 15px; }
+        .stat-card { background: white; padding: 15px; border-radius: 10px; box-shadow: var(--shadow); text-align: center; cursor: pointer; border: 2px solid transparent; transition: 0.2s; }
+        .stat-card.active { border-color: var(--verde-cesped); background-color: var(--verde-suave); }
+        .stat-card strong { display: block; font-size: 24px; margin-top: 5px; }
+
+        .filtros-fisicos { display: flex; justify-content: center; align-items: center; gap: 10px; margin-bottom: 15px; background: white; padding: 12px; border-radius: 10px; box-shadow: var(--shadow); flex-wrap: wrap; }
+        .filtros-fisicos select, .filtros-fisicos input { min-width: 180px; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; font-family: 'Ubuntu'; outline: none; text-align: center; }
+        
+        .btn-sync { background: var(--verde-cesped); color: white; border: none; padding: 9px 15px; border-radius: 6px; font-family: 'Ubuntu'; font-weight: bold; cursor: pointer; transition: 0.2s; display: flex; align-items: center; gap: 5px; }
+        .btn-sync:hover { background: var(--verde-borde); transform: scale(1.02); }
+
+        /* TARJETA PANORÁMICA DE AUDITORÍA */
+        #resumen-partidas { display: flex; justify-content: center; margin-bottom: 15px; flex-direction: column; align-items: center; gap: 15px; }
+        .card-auditoria { background: white; border-radius: 10px; box-shadow: var(--shadow); width: 100%; max-width: 1050px; overflow: hidden; border: 1px solid #e2e8f0; text-align: left; display: flex; flex-direction: column; }
+        .card-auditoria-header { padding: 12px 20px; color: white; font-weight: bold; font-size: 18px; text-shadow: 1px 1px 2px rgba(0,0,0,0.3); display: flex; justify-content: space-between; align-items: center; }
+        .card-auditoria-body { display: flex; flex-wrap: wrap; }
+        
+        .partida-bloque { border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+        .partida-header { background: #f8fafc; padding: 6px 12px; font-weight: bold; font-size: 13px; color: #1e293b; border-bottom: 1px solid #cbd5e1; display: flex; justify-content: space-between; }
+        .partida-grid { display: grid; grid-template-columns: repeat(5, 1fr); text-align: center; background: white; }
+        .pg-item { padding: 10px; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 4px; justify-content: center; }
+        .pg-item:last-child { border-right: none; }
+        .pg-item span { font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: bold; }
+        .pg-item b { font-size: 15px; color: #1e293b; } 
+        
+        .descuadre-ok { color: var(--verde-cesped) !important; }
+        .descuadre-warn { color: var(--rojo-alerta) !important; }
+
+        /* TABLA NORMAL */
+        .table-wrap { background: white; border-radius: 12px; overflow: hidden; box-shadow: var(--shadow); width: 100%; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f1f5f9; padding: 12px; font-size: 12px; color: #64748b; text-transform: uppercase; cursor: pointer; border-bottom: 2px solid #e2e8f0; }
+        
+        tbody tr { transition: background-color 0.15s ease; outline: 2px solid transparent; outline-offset: -2px; }
+        td { padding: 6px 10px; border-bottom: 1px solid #f1f5f9; }
+        tbody tr:hover { background-color: var(--verde-suave) !important; outline: 2px solid var(--verde-borde); z-index: 10; position: relative; }
+        tbody tr:hover td { border-bottom-color: transparent; }
+
+        .badge-select { appearance: none; border: none; padding: 6px 10px; border-radius: 6px; font-family: 'Ubuntu'; font-weight: 700; font-size: 12px; cursor: pointer; width: 100%; height: 28px; outline: none; text-align: center; box-sizing: border-box; }
+        .badge-select option { background-color: white !important; color: black !important; font-weight: normal !important; }
+
+        .input-complementos { background: var(--complementos-bg); color: var(--complementos-text); text-transform: uppercase; border: 1px solid #cbd5e1; cursor: text; }
+        .input-complementos:focus { background: white; border-color: var(--verde-cesped); box-shadow: 0 0 0 3px var(--verde-suave); }
+        .input-complementos::placeholder { color: #94a3b8; text-transform: none; font-weight: normal; }
+
+        .input-qty { width: 60px; padding: 5px; text-align: center; font-weight: bold; border: 1px solid #cbd5e1; border-radius: 6px; height: 28px; box-sizing: border-box; }
+        
+        .est-Empezado { background: var(--verde-suave); color: var(--verde-cesped); border: 1px solid var(--verde-cesped); }
+        .est-Completo { background: var(--rojo-suave); color: var(--rojo-alerta); border: 1px solid var(--rojo-alerta); }
+        .est-Vacio { background: #ffffff; color: #94a3b8; border: 1px dashed #cbd5e1; } 
+        .est-Complementos { background: var(--complementos-bg); color: var(--complementos-text); border: 1px solid #cbd5e1; }
+
+        .btn-action { background: none; border: none; cursor: pointer; font-size: 16px; padding: 4px; border-radius: 4px; transition: 0.2s; opacity: 0.6; }
+        .btn-del { color: var(--rojo-alerta); }
+        .btn-del:hover { background: var(--rojo-suave); opacity: 1; }
+
+        .ubi-text { font-weight: 900; color: #475569; font-size: 14px; cursor: pointer; display: inline-block; padding: 4px 8px; border-radius: 6px; transition: 0.2s; }
+        .ubi-text:hover { background: rgba(0,0,0,0.05); color: var(--verde-cesped); }
+
+        /* MAPA ARQUITECTÓNICO OPTIMIZADO (GRIDS) */
+        .plano-almacen { 
+            display: grid; 
+            grid-template-columns: auto auto; 
+            grid-auto-rows: min-content; 
+            row-gap: 5px; 
+            column-gap: 80px; /* Pasillo central ancho */
+            align-items: start; 
+            justify-content: center; 
+            padding: 20px;
+        }
+
+        #caja-est-2 { grid-column: 2; grid-row: 1; margin-bottom: 5px; } 
+        #zona-izq { grid-column: 1; grid-row: 2 / span 3; display: flex; gap: 20px; align-items: flex-start; } 
+        #caja-est-3 { grid-column: 2; grid-row: 2; } 
+        #caja-est-45 { grid-column: 2; grid-row: 3; display: flex; flex-direction: column; gap: 15px; margin-top: 15px; } 
+        #caja-est-6 { grid-column: 2; grid-row: 4; margin-top: 15px; }
+        #zona-aba { grid-column: 1 / span 2; grid-row: 5; margin-top: 30px; display: flex; justify-content: center; width: 100%; } 
+
+        .estanteria { background: white; padding: 10px; border-radius: 8px; box-shadow: var(--shadow); border: 1px solid #e2e8f0; width: max-content; }
+        .estanteria h3 { margin: 0 0 6px 0; font-size: 12px; color: #475569; border-bottom: 2px solid #f1f5f9; padding-bottom: 4px; text-align: center; text-transform: uppercase; }
+        
+        .contenedor-horizontal { display: flex; flex-direction: column; gap: 3px; }
+        .nivel-horiz { display: flex; gap: 3px; align-items: center; justify-content: center; padding: 4px; background: #f8fafc; border-radius: 6px; }
+        .nivel-horiz b { min-width: 14px; font-size: 11px; color: #94a3b8; text-align: center; }
+        
+        .contenedor-vertical { display: flex; flex-direction: row; gap: 3px; }
+        .nivel-vert { display: flex; flex-direction: column; gap: 3px; align-items: center; padding: 4px; background: #f8fafc; border-radius: 6px; }
+        .nivel-vert b { font-size: 11px; color: #94a3b8; margin-bottom: 3px; }
+
+        .hueco { 
+            width: 58px; height: 36px; border-radius: 5px; display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; color: white; font-weight: bold; 
+            cursor: pointer; box-shadow: inset 0 -2px 0 rgba(0,0,0,0.15); line-height: 1.1; padding: 2px;
+            transition: transform 0.1s;
+        }
+        .hueco:hover { transform: scale(1.15); z-index: 10; position: relative; }
+        .hueco span.ubi { font-size: 11px; letter-spacing: -0.5px; }
+        .hueco span.mod { font-size: 7.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 54px; margin-top: 1px; }
+        .hueco span.can { font-size: 10px; background: rgba(0,0,0,0.4); padding: 1px 4px; border-radius: 3px; margin-top: 2px; }
+        
+        .map-Empezado { background: var(--verde-cesped); }
+        .map-Completo { background: var(--rojo-alerta); }
+        .map-Vacio { background: #ffffff; color: #94a3b8; border: 1px dashed #cbd5e1; box-shadow: none; }
+        .map-Complementos { background: var(--complementos-bg); color: var(--complementos-text); border: 1px solid #cbd5e1; box-shadow: none; }
+
+        .color-list { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
+        .color-row { display: flex; align-items: center; justify-content: space-between; background: white; padding: 10px 15px; border-radius: 10px; border: 1px solid #e2e8f0; width: 220px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); transition: 0.2s; }
+        .color-row:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: var(--verde-cesped); }
+        .color-row .preview-badge { flex: 1; text-align: left; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: bold; margin-right: 15px; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.4); }
+        input[type="color"] { appearance: none; -moz-appearance: none; -webkit-appearance: none; background: none; border: 0; cursor: pointer; height: 32px; width: 32px; padding: 0; border-radius: 50%; }
+        ::-webkit-color-swatch-wrapper { padding: 0; }
+        ::-webkit-color-swatch{ border: 2px solid #e2e8f0; border-radius: 50%; }
+
+        #toast { position: fixed; bottom: 20px; right: 20px; background: #10b981; color: white; padding: 12px 20px; border-radius: 8px; font-weight: bold; display: none; z-index: 1000; }
+    </style>
+</head>
+<body>
+
+<datalist id="lista-complementos"></datalist>
+
+<div class="container">
+    <header onclick="resetPagina()" title="Limpiar filtros e ir al inicio">
+        <div class="header-content">
+            <img src="icono.jpg" alt="TC" style="height: 45px; border-radius: 8px;" onerror="this.style.display='none'">
+            <div class="header-text" style="text-align: left;">
+                <h1 style="margin:0; font-size: 26px;">todoCESPED</h1>
+                <p id="status" style="margin:0; font-size: 14px; color: #000; font-weight: bold;">Plataforma Logística</p>
+            </div>
+        </div>
+    </header>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="cambiarPestana('lista', this)">📋 Gestión Stock</button>
+        <button class="tab-btn" onclick="cambiarPestana('mapa', this)">🗺️ Mapa</button>
+        <button class="tab-btn" onclick="cambiarPestana('ajustes', this)" style="margin-left: auto;">🎨 Ajustar Colores</button>
+    </div>
+
+    <div id="vista-lista" class="vista active">
+        <div class="stats">
+            <div id="stat-cesped" class="stat-card active" onclick="setFiltroEstado('CESPED', this)"><span>Césped</span><strong id="count-cesped">0</strong></div>
+            <div class="stat-card" onclick="setFiltroEstado('Empezado', this)"><span>Empezados</span><strong id="count-emp" style="color:var(--verde-cesped)">0</strong></div>
+            <div class="stat-card" onclick="setFiltroEstado('Completo', this)"><span>Completos</span><strong id="count-com" style="color:var(--rojo-alerta)">0</strong></div>
+            <div class="stat-card" onclick="setFiltroEstado('Vacio', this)"><span>Vacíos</span><strong id="count-vac" style="color:#94a3b8">0</strong></div>
+            <div class="stat-card" onclick="setFiltroEstado('Complementos', this)"><span>Complementos</span><strong id="count-comp" style="color:var(--complementos-text)">0</strong></div>
+        </div>
+
+        <div class="filtros-fisicos">
+            <select id="f-estanteria" onchange="renderizarFuerte()"><option value="ALL">🔍 Todas las Estanterías</option></select>
+            <select id="f-altura" onchange="renderizarFuerte()"><option value="ALL">🔍 Todas las Alturas</option></select>
+            <input type="text" id="f-busqueda" placeholder="Buscar modelo (pon TODOS)..." onkeyup="renderizarFuerte()">
+            <button class="btn-sync" onclick="sincronizarERP()">🔄 Sincronizar ERP</button>
+        </div>
+
+        <div id="resumen-partidas"></div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:15%" onclick="ordenarTabla('ubi')">Ubicación ↕️</th>
+                        <th style="width:28%" onclick="ordenarTabla('mod')" id="th-mod">Modelo ↕️</th>
+                        <th style="width:17%" onclick="ordenarTabla('par')" id="th-par">Partida ↕️</th>
+                        <th style="width:12%" onclick="ordenarTabla('can')">Cant. ↕️</th>
+                        <th style="width:23%" onclick="ordenarTabla('est')">Estado ↕️</th>
+                        <th style="width:5%"></th>
+                    </tr>
+                </thead>
+                <tbody id="tabla-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="vista-mapa" class="vista">
+        <div class="plano-almacen" id="mapa-contenedor">
+            <div id="caja-est-2"></div>
+            <div id="zona-izq"></div>
+            <div id="caja-est-3"></div>
+            <div id="caja-est-45"></div>
+            <div id="caja-est-6"></div>
+            <div id="zona-aba"></div>
+        </div>
+    </div>
+
+    <div id="vista-ajustes" class="vista">
+        <div style="background: white; padding: 20px; border-radius: 12px; margin-bottom: 20px; box-shadow: var(--shadow);">
+            <h2 style="margin-top: 0; color: #334155; font-size: 20px;">Personalización de Modelos</h2>
+            <p style="color:#64748b; font-size:14px;">Elige el tono exacto para cada modelo de césped.</p>
+        </div>
+        <div class="color-list" id="grid-colores"></div>
+    </div>
+</div>
+
+<div id="toast">✅ Guardado</div>
+
+<script>
+    // ==========================================
+    // 1. CONFIGURACIÓN Y BASES DE DATOS EXTERNAS
+    // ==========================================
+    const fbConfig = {
+        apiKey: "AIzaSyAUsjYkLDHJxdjMRNremVxQxWc-nUf0TFs",
+        authDomain: "todocesped-logistica.firebaseapp.com",
+        projectId: "todocesped-logistica",
+        storageBucket: "todocesped-logistica.firebasestorage.app",
+        messagingSenderId: "369838045746",
+        appId: "1:369838045746:web:d66700de2d8c41c6d59a2b"
+    };
+    let modoOffline = false;
+    
+    let bdRetales = {}; 
+    let bdOdoo = {};    
+
+    const catalogComplementos = [
+        "AGUA DESTILADA", "AGUINALDO", "AIR-BUR TERMIC 10 4MM 30M2", "AIR-BUR TERMIC 10 4MM 60M2", "AIR-BUR TERMIC CM XPS 18MM",
+        "AIR-BUR TERMIC CM XPS 28MM", "AIR-BUR TERMIC CM XPS 38MM", "BAGHERA | JARDÍN VERTICAL", "BALOO | JARDÍN VERTICAL",
+        "BANDA AUTOADHESIVA 10M", "BANDA AUTOADHESIVA 5M", "BANDA DE UNIÓN 100M", "BANDA DE UNIÓN 20M", "BANDA DE UNIÓN 30M",
+        "BANDA DE UNIÓN 50M", "BARREDORA GARLAND", "BOTE 0.5L", "BOTE 1L", "BOTES Y GARRAFAS VIEJOS", "CAJA DE COMPLEMENTOS",
+        "CAJA DE MUESTRAS", "CAJA GRANDES", "CAJA PEQUEÑAS", "CAJÓN MUESTRAS ONE", "CAJÓN MUESTRAS PANTICOSA", "CAJÓN MUESTRAS TERRA",
+        "CEPILLADORA GARLAND", "CEPILLO CÉSPED ARTIFICIAL", "CINTA DOBLE CARA", "CINTALUX ALUMINIO", "CLAVOS PIQUETAS",
+        "COLA PU (FIFA) 12KG", "COLA PU (FIFA) 5-6KG", "CUTER PROFESIONAL", "DESINFECTANTE", "ENVASE PINTURA TÉRMICA 20L",
+        "ENVASE PINTURA TÉRMICA 4L", "EXPOSITORES", "FILM | ARELUX", "FILM BLANCO", "FLEJE DE POLIÉSTER VERDE", "FLEJE DE POLIPROPILENO NEGRO",
+        "FONDO 1200X800", "FONDO 600X800", "GARRAFA RESINA 10L", "GARRAFA RESINA 25L", "GARRAFA RESINA 5L", "HIDROLIMPIADORA GARLAND",
+        "IMPERLUX BLANCO 20KG", "IMPERLUX BLANCO 5KG", "IMPERLUX GRIS 20KG", "IMPERLUX GRIS 5KG", "IMPERLUX POL GRIS 25KG",
+        "IMPERLUX POL GRIS 6KG", "IMPERLUX ROJO 20KG", "IMPERLUX ROJO 5KG", "IMPERLUX TERMIC ANTIMOHO 20L", "IMPERLUX TERMIC ANTIMOHO 4L",
+        "IMPERLUX TERMIC INDOOR 20L", "IMPERLUX TERMIC INDOOR 4L", "IMPERLUX TERMIC OUTDOOR 20L", "IMPERLUX TERMIC OUTDOOR 4L",
+        "IMPERLUX TERMIC ROOF 20L", "IMPERLUX TERMIC ROOF 4L", "IMPRIMACIÓN EPOXI W 15+3KG", "IMPRIMACIÓN EPOXI W 5+1KG",
+        "IMPRIMACIÓN PU 2C 20+4KG", "IMPRIMACIÓN PU 2C 5+1 KG", "LLAVEROS ETIQU. | ARELUX DIPTICOS", "MALLA GEOTEXTIL 120 | TODO CESPED",
+        "MALLA GEOTEXTIL | ARELUX", "MALLA ANTIHIERBAS 10M2", "MALLA ANTIHIERBAS 30M2", "MALLA ANTIHIERBAS 60M2", "MALLA ÓPTIMA 130",
+        "MOWGLI JARDIN VERTICAL", "MUESTRA | AISLATERMIC", "MUESTRAS B2B", "MUESTRAS B2B NEGRAS 2026", "MUESTRAS B2C", "MUESTRAS B2C 2026",
+        "PALOS DE CEPILLO CÉSPED ARTIFICIAL", "PISTOLA APLICADOR SILICONA", "PRECINTO | ARELUX", "PRECINTO | TODOCESPED", "PRECINTO TRANSPARENTE",
+        "PULVERIZADORES TAPONES", "RODILLO PROFESIONAL ANTIGOTA", "ROLLO DE BURBUJA", "SELLADOR TC FIXGRASS", "SOBREEMBALAJE ADR"
+    ].sort(); 
+
+    const datalist = document.getElementById('lista-complementos');
+    catalogComplementos.forEach(art => { datalist.innerHTML += `<option value="${art}">`; });
+
+    let inventario = [], coloresDB = {}, modelosUnicos = [], filtroEstado = 'CESPED', sortCol = 'ubi', sortAsc = true, primeraCarga = true;
+
+    const coloresDefault = {"AINSA": "#ff5a00", "ALL NATURE": "#f4ff20", "ANETO": "#ff008b", "BENASQUE": "#5a3286", "BESSER 47": "#e8eaed", "CERLER": "#e6cff2", "EVEREST": "#4cbbff", "EVERT FRESH 25 2x3": "#000000", "EVERT FRESH 25 2x5": "#000000", "EVERT HOME 35 2x5": "#88ff00", "FEST 18": "#e8eaed", "FEST 25": "#acacac", "FEST 35": "#bfff82", "LANUZA": "#ffc8aa", "LEBEN 47": "#e8eaed", "ONE PRO": "#3d3d3d", "PORTO": "#ff3333", "RETALES": "#e8eaed", "SPIELE 47": "#e8eaed", "TC35": "#ffe100", "TERRA": "#753800"};
+
+    const datosBase = [
+        { id: "02A01_1", ubi: "02A01", mod: "FEST 18", par: "24.2", can: 2, est: "Empezado" }, { id: "02A02_1", ubi: "02A02", mod: "ONE PRO", par: "25.22", can: 26, est: "Completo" }, { id: "02A03_1", ubi: "02A03", mod: "ONE PRO", par: "25.22", can: 26, est: "Completo" }, { id: "02A04_1", ubi: "02A04", mod: "ONE PRO", par: "25.22", can: 26, est: "Completo" }, { id: "02A05_1", ubi: "02A05", mod: "", par: "", can: 0, est: "Vacio" }, { id: "02B01_1", ubi: "02B01", mod: "ONE PRO", par: "25.22", can: 27, est: "Completo" }, { id: "02B02_1", ubi: "02B02", mod: "ONE PRO", par: "25.22", can: 26, est: "Completo" }, { id: "02B03_1", ubi: "02B03", mod: "FEST 25", par: "25.20", can: 91, est: "Completo" }, { id: "02B04_1", ubi: "02B04", mod: "FEST 35", par: "25.24", can: 88, est: "Completo" }, { id: "02B05_1", ubi: "02B05", mod: "TC35", par: "SIN PDA", can: 1, est: "Empezado" }, { id: "02C01_1", ubi: "02C01", mod: "ONE PRO", par: "25.22", can: 23, est: "Completo" }, { id: "02C02_1", ubi: "02C02", mod: "FEST 25", par: "25.20", can: 68, est: "Completo" }, { id: "02C03_1", ubi: "02C03", mod: "FEST 25", par: "25.20", can: 69, est: "Completo" }, { id: "02C04_1", ubi: "02C04", mod: "FEST 25", par: "25.7", can: 50, est: "Empezado" }, { id: "02C04_2", ubi: "02C04", mod: "FEST 35", par: "25.24", can: 6, est: "Empezado" }, { id: "02C05_1", ubi: "02C05", mod: "TC35", par: "SIN PDA", can: 19, est: "Completo" }, { id: "03A01_1", ubi: "03A01", mod: "RETALES", par: "", can: 0, est: "Completo" }, { id: "03A02_1", ubi: "03A02", mod: "FEST 35", par: "25.24", can: 81, est: "Completo" }, { id: "03A03_1", ubi: "03A03", mod: "AINSA", par: "26.2", can: 30, est: "Empezado" }, { id: "03A04_1", ubi: "03A04", mod: "FEST 25", par: "25.23", can: 100, est: "Completo" }, { id: "03A05_1", ubi: "03A05", mod: "ONE PRO", par: "25.22", can: 26, est: "Completo" }, { id: "03B01_1", ubi: "03B01", mod: "EVEREST", par: "25.15", can: 39, est: "Completo" }, { id: "03B02_1", ubi: "03B02", mod: "EVEREST", par: "25.15", can: 35, est: "Empezado" }, { id: "03B03_1", ubi: "03B03", mod: "FEST 35", par: "25.24", can: 88, est: "Completo" }, { id: "03B04_1", ubi: "03B04", mod: "AINSA", par: "25.11", can: 1, est: "Empezado" }, { id: "03B05_1", ubi: "03B05", mod: "", par: "", can: 0, est: "Vacio" }, { id: "03C01_1", ubi: "03C01", mod: "EVEREST", par: "25.15", can: 28, est: "Completo" }, { id: "03C02_1", ubi: "03C02", mod: "EVEREST", par: "25.15", can: 30, est: "Completo" }, { id: "03C03_1", ubi: "03C03", mod: "AINSA", par: "26.2", can: 38, est: "Completo" }, { id: "03C04_1", ubi: "03C04", mod: "AINSA", par: "26.2", can: 39, est: "Completo" }, { id: "03C05_1", ubi: "03C05", mod: "", par: "", can: 0, est: "Vacio" }, { id: "04A01_1", ubi: "04A01", mod: "RETALES", par: "", can: 0, est: "Completo" }, { id: "04A02_1", ubi: "04A02", mod: "FEST 25", par: "25.20", can: 90, est: "Completo" }, { id: "04A03_1", ubi: "04A03", mod: "FEST 25", par: "25.20", can: 91, est: "Completo" }, { id: "04A04_1", ubi: "04A04", mod: "", par: "", can: 0, est: "Vacio" }, { id: "04A05_1", ubi: "04A05", mod: "FEST 25", par: "25.23", can: 100, est: "Completo" }, { id: "04B01_1", ubi: "04B01", mod: "TERRA", par: "25.10", can: 41, est: "Completo" }, { id: "04B02_1", ubi: "04B02", mod: "", par: "", can: 0, est: "Vacio" }, { id: "04B03_1", ubi: "04B03", mod: "FEST 25", par: "25.20", can: 89, est: "Completo" }, { id: "04B04_1", ubi: "04B04", mod: "", par: "", can: 0, est: "Vacio" }, { id: "04B05_1", ubi: "04B05", mod: "FEST 35", par: "25.24", can: 85, est: "Completo" }, { id: "04C01_1", ubi: "04C01", mod: "EVEREST", par: "25.16", can: 27, est: "Completo" }, { id: "04C02_1", ubi: "04C02", mod: "EVEREST", par: "25.16", can: 26, est: "Empezado" }, { id: "04C03_1", ubi: "04C03", mod: "", par: "", can: 0, est: "Vacio" }, { id: "04C04_1", ubi: "04C04", mod: "", par: "", can: 0, est: "Vacio" }, { id: "04C05_1", ubi: "04C05", mod: "TERRA", par: "25.10", can: 36, est: "Completo" }, { id: "05A01_1", ubi: "05A01", mod: "RETALES", par: "", can: 0, est: "Completo" }, { id: "05A02_1", ubi: "05A02", mod: "BENASQUE", par: "26.3", can: 37, est: "Completo" }, { id: "05A03_1", ubi: "05A03", mod: "BENASQUE", par: "26.3", can: 40, est: "Completo" }, { id: "05A04_1", ubi: "05A04", mod: "TERRA", par: "25.10", can: 43, est: "Completo" }, { id: "05A05_1", ubi: "05A05", mod: "FEST 25", par: "25.23", can: 97, est: "Completo" }, { id: "05B01_1", ubi: "05B01", mod: "FEST 35", par: "25.21", can: 81, est: "Completo" }, { id: "05B02_1", ubi: "05B02", mod: "TERRA", par: "25.10", can: 42, est: "Completo" }, { id: "05B03_1", ubi: "05B03", mod: "BENASQUE", par: "26.3", can: 38, est: "Completo" }, { id: "05B04_1", ubi: "05B04", mod: "TERRA", par: "25.10", can: 43, est: "Completo" }, { id: "05B05_1", ubi: "05B05", mod: "BENASQUE", par: "26.3", can: 38, est: "Completo" }, { id: "05C01_1", ubi: "05C01", mod: "FEST 35", par: "25.21", can: 66, est: "Completo" }, { id: "05C02_1", ubi: "05C02", mod: "FEST 35", par: "25.21", can: 64, est: "Completo" }, { id: "05C03_1", ubi: "05C03", mod: "FEST 35", par: "25.21", can: 64, est: "Completo" }, { id: "05C04_1", ubi: "05C04", mod: "FEST 35", par: "25.21", can: 65, est: "Completo" }, { id: "05C05_1", ubi: "05C05", mod: "FEST 35", par: "25.21", can: 64, est: "Completo" }, { id: "06A01_1", ubi: "06A01", mod: "RETALES", par: "", can: 0, est: "Completo" }, { id: "06A02_1", ubi: "06A02", mod: "RETALES", par: "", can: 0, est: "Completo" }, { id: "06A03_1", ubi: "06A03", mod: "FEST 25", par: "25.23", can: 100, est: "Completo" }, { id: "06A04_1", ubi: "06A04", mod: "FEST 25", par: "25.23", can: 102, est: "Completo" }, { id: "06A05_1", ubi: "06A05", mod: "ONE PRO", par: "25.22", can: 26, est: "Completo" }, { id: "06B01_1", ubi: "06B01", mod: "FEST 35", par: "25.24", can: 96, est: "Completo" }, { id: "06B02_1", ubi: "06B02", mod: "TERRA", par: "25.10", can: 43, est: "Completo" }, { id: "06B03_1", ubi: "06B03", mod: "ONE PRO", par: "25.22", can: 26, est: "Completo" }, { id: "06B04_1", ubi: "06B04", mod: "BENASQUE", par: "26.3", can: 8, est: "Empezado" }, { id: "06B05_1", ubi: "06B05", mod: "TERRA", par: "25.10", can: 42, est: "Completo" }, { id: "06C01_1", ubi: "06C01", mod: "", par: "", can: 0, est: "Vacio" }, { id: "06C02_1", ubi: "06C02", mod: "TERRA", par: "25.10", can: 28, est: "Completo" }, { id: "06C03_1", ubi: "06C03", mod: "TERRA", par: "25.10", can: 30, est: "Completo" }, { id: "06C04_1", ubi: "06C04", mod: "ONE PRO", par: "25.22", can: 23, est: "Completo" }, { id: "06C05_1", ubi: "06C05", mod: "", par: "", can: 0, est: "Vacio" }, { id: "07A01_1", ubi: "07A01", mod: "ONE PRO", par: "25.22", can: 19, est: "Completo" }, { id: "07A02_1", ubi: "07A02", mod: "ALL NATURE", par: "26.1", can: 38, est: "Empezado" }, { id: "07A03_1", ubi: "07A03", mod: "ALL NATURE", par: "26.1", can: 38, est: "Completo" }, { id: "07A04_1", ubi: "07A04", mod: "ALL NATURE", par: "26.1", can: 39, est: "Completo" }, { id: "07A05_1", ubi: "07A05", mod: "RETALES", par: "", can: 0, est: "Completo" }, { id: "07A06_1", ubi: "07A06", mod: "RETALES", par: "", can: 0, est: "Completo" }, { id: "07A07_1", ubi: "07A07", mod: "RETALES", par: "", can: 0, est: "Completo" }, { id: "07A08_1", ubi: "07A08", mod: "ANETO", par: "25.14", can: 38, est: "Empezado" }, { id: "07A09_1", ubi: "07A09", mod: "FEST 35", par: "25.19", can: 81, est: "Completo" }, { id: "07A10_1", ubi: "07A10", mod: "", par: "", can: 0, est: "Vacio" }, { id: "07A11_1", ubi: "07A11", mod: "", par: "", can: 0, est: "Vacio" }, { id: "07A12_1", ubi: "07A12", mod: "BENASQUE", par: "26.5", can: 16, est: "Completo" }, { id: "07A12_2", ubi: "07A12", mod: "LEBEN 47", par: "I25.3", can: 4, est: "Completo" }, { id: "07B01_1", ubi: "07B01", mod: "ONE PRO", par: "25.22", can: 20, est: "Completo" }, { id: "07B02_1", ubi: "07B02", mod: "", par: "", can: 0, est: "Vacio" }, { id: "07B03_1", ubi: "07B03", mod: "", par: "", can: 0, est: "Vacio" }, { id: "07B04_1", ubi: "07B04", mod: "", par: "", can: 0, est: "Vacio" }, { id: "07B05_1", ubi: "07B05", mod: "ONE PRO", par: "25.22", can: 26, est: "Completo" }, { id: "07B06_1", ubi: "07B06", mod: "TERRA", par: "25.10", can: 43, est: "Empezado" }, { id: "07B07_1", ubi: "07B07", mod: "FEST 25", par: "25.18", can: 106, est: "Completo" }, { id: "07B08_1", ubi: "07B08", mod: "ONE PRO", par: "25.17", can: 26, est: "Empezado" }, { id: "07B09_1", ubi: "07B09", mod: "FEST 35", par: "25.19", can: 26, est: "Empezado" }, { id: "07B10_1", ubi: "07B10", mod: "ONE PRO", par: "25.17", can: 27, est: "Completo" }, { id: "07B11_1", ubi: "07B11", mod: "", par: "", can: 0, est: "Vacio" }, { id: "07B12_1", ubi: "07B12", mod: "", par: "", can: 0, est: "Vacio" }, { id: "07C01_1", ubi: "07C01", mod: "", par: "", can: 0, est: "Vacio" }, { id: "07C02_1", ubi: "07C02", mod: "ONE PRO", par: "25.17", can: 22, est: "Completo" }, { id: "07C03_1", ubi: "07C03", mod: "ONE PRO", par: "25.17", can: 24, est: "Completo" }, { id: "07C04_1", ubi: "07C04", mod: "ONE PRO", par: "25.17", can: 24, est: "Completo" }, { id: "07C05_1", ubi: "07C05", mod: "TERRA", par: "25.10", can: 3, est: "Empezado" }, { id: "07C06_1", ubi: "07C06", mod: "", par: "", can: 0, est: "Vacio" }, { id: "07C07_1", ubi: "07C07", mod: "FEST 25", par: "25.18", can: 50, est: "Empezado" }, { id: "07C08_1", ubi: "07C08", mod: "FEST 25", par: "25.18", can: 70, est: "Completo" }, { id: "07C09_1", ubi: "07C09", mod: "FEST 35", par: "25.19", can: 64, est: "Completo" }, { id: "07C10_1", ubi: "07C10", mod: "ONE PRO", par: "25.22", can: 23, est: "Completo" }, { id: "07C11_1", ubi: "07C11", mod: "TERRA", par: "25.10", can: 28, est: "Completo" }, { id: "07C12_1", ubi: "07C12", mod: "PORTO", par: "22.12", can: 11, est: "Empezado" }, { id: "08A01_1", ubi: "08A01", mod: "", par: "", can: 0, est: "Vacio" }, { id: "08A02_1", ubi: "08A02", mod: "EVERT FRESH 25 2x3", par: "", can: 93, est: "Empezado" }, { id: "08A03_1", ubi: "08A03", mod: "EVERT FRESH 25 2x5", par: "", can: 171, est: "Empezado" }, { id: "08A04_1", ubi: "08A04", mod: "FEST 35", par: "25.8", can: 18, est: "Empezado" }, { id: "08A05_1", ubi: "08A05", mod: "EVERT HOME 35 2x5", par: "", can: 79, est: "Empezado" }, { id: "08A06_1", ubi: "08A06", mod: "FEST 18", par: "25.27", can: 92, est: "Completo" }, { id: "08A07_1", ubi: "08A07", mod: "FEST 18", par: "25.27", can: 52, est: "Empezado" }, { id: "08A08_1", ubi: "08A08", mod: "", par: "", can: 0, est: "Vacio" }, { id: "08B01_1", ubi: "08B01", mod: "", par: "", can: 0, est: "Vacio" }, { id: "08B02_1", ubi: "08B02", mod: "TERRA", par: "25.10", can: 43, est: "Completo" }, { id: "08B03_1", ubi: "08B03", mod: "TERRA", par: "25.10", can: 43, est: "Completo" }, { id: "08B04_1", ubi: "08B04", mod: "LEBEN 47", par: "I25.3", can: 26, est: "Completo" }, { id: "08B05_1", ubi: "08B05", mod: "BESSER 47", par: "I25.2", can: 37, est: "Completo" }, { id: "08B06_1", ubi: "08B06", mod: "SPIELE 47", par: "I25.1", can: 27, est: "Completo" }, { id: "08B07_1", ubi: "08B07", mod: "TERRA", par: "25.10", can: 38, est: "Completo" }, { id: "08B08_1", ubi: "08B08", mod: "FEST 18", par: "25.27", can: 85, est: "Completo" }, { id: "08C01_1", ubi: "08C01", mod: "", par: "", can: 0, est: "Vacio" }, { id: "08C02_1", ubi: "08C02", mod: "BESSER 47", par: "I25.2", can: 21, est: "Completo" }, { id: "08C03_1", ubi: "08C03", mod: "FEST 35", par: "25.21", can: 40, est: "Completo" }, { id: "08C04_1", ubi: "08C04", mod: "TERRA", par: "25.10", can: 30, est: "Completo" }, { id: "08C05_1", ubi: "08C05", mod: "LEBEN 47", par: "I25.3", can: 16, est: "Completo" }, { id: "08C06_1", ubi: "08C06", mod: "SPIELE 47", par: "I25.1", can: 19, est: "Completo" }, { id: "08C07_1", ubi: "08C07", mod: "TERRA", par: "25.10", can: 27, est: "Completo" }, { id: "08C08_1", ubi: "08C08", mod: "FEST 18", par: "25.27", can: 56, est: "Completo" }, { id: "09A01_1", ubi: "09A01", mod: "CERLER", par: "26.3", can: 8, est: "Empezado" }, { id: "09A02_1", ubi: "09A02", mod: "", par: "", can: 0, est: "Vacio" }, { id: "09A03_1", ubi: "09A03", mod: "", par: "", can: 0, est: "Vacio" }, { id: "09A04_1", ubi: "09A04", mod: "BENASQUE", par: "26.3", can: 38, est: "Completo" }, { id: "09A05_1", ubi: "09A05", mod: "", par: "", can: 0, est: "Vacio" }, { id: "09B01_1", ubi: "09B01", mod: "", par: "", can: 0, est: "Vacio" }, { id: "09B02_1", ubi: "09B02", mod: "CERLER", par: "26.3", can: 30, est: "Completo" }, { id: "09B03_1", ubi: "09B03", mod: "", par: "", can: 0, est: "Vacio" }, { id: "09B04_1", ubi: "09B04", mod: "BENASQUE", par: "26.3", can: 38, est: "Completo" }, { id: "09B05_1", ubi: "09B05", mod: "", par: "", can: 0, est: "Vacio" }, { id: "09C01_1", ubi: "09C01", mod: "", par: "", can: 0, est: "Vacio" }, { id: "09C02_1", ubi: "09C02", mod: "", par: "", can: 0, est: "Vacio" }, { id: "09C03_1", ubi: "09C03", mod: "", par: "", can: 0, est: "Vacio" }, { id: "09C04_1", ubi: "09C04", mod: "", par: "", can: 0, est: "Vacio" }, { id: "09C05_1", ubi: "09C05", mod: "", par: "", can: 0, est: "Vacio" }, { id: "10A01_1", ubi: "10A01", mod: "", par: "", can: 0, est: "Vacio" }, { id: "10A02_1", ubi: "10A02", mod: "", par: "", can: 0, est: "Vacio" }, { id: "10A03_1", ubi: "10A03", mod: "ANETO", par: "25.14", can: 0, est: "Completo" }, { id: "10A04_1", ubi: "10A04", mod: "LANUZA", par: "26.2", can: 0, est: "Completo" }, { id: "10A05_1", ubi: "10A05", mod: "LANUZA", par: "26.2", can: 0, est: "Completo" }, { id: "10B01_1", ubi: "10B01", mod: "", par: "", can: 0, est: "Vacio" }, { id: "10B02_1", ubi: "10B02", mod: "ANETO", par: "25.14", can: 0, est: "Completo" }, { id: "10B03_1", ubi: "10B03", mod: "ANETO", par: "25.14", can: 0, est: "Completo" }, { id: "10B04_1", ubi: "10B04", mod: "LANUZA", par: "26.2", can: 0, est: "Completo" }, { id: "10B05_1", ubi: "10B05", mod: "LANUZA", par: "26.2", can: 30, est: "Empezado" }, { id: "10C01_1", ubi: "10C01", mod: "", par: "", can: 0, est: "Vacio" }, { id: "10C02_1", ubi: "10C02", mod: "", par: "", can: 0, est: "Vacio" }, { id: "10C03_1", ubi: "10C03", mod: "", par: "", can: 0, est: "Vacio" }, { id: "10C04_1", ubi: "10C04", mod: "ANETO", par: "25.14", can: 0, est: "Completo" }, { id: "10C05_1", ubi: "10C05", mod: "", par: "", can: 0, est: "Vacio" }
+    ];
+
+    window.onload = () => {
+        if(modoOffline) { 
+            inventario = [...datosBase]; 
+            coloresDB = coloresDefault; 
+            iniciarApp(false); 
+        } else {
+            firebase.initializeApp(fbConfig); 
+            dbFirebase = firebase.firestore();
+            
+            dbFirebase.collection("config").doc("colores").onSnapshot(d => { 
+                if(!d.exists) {
+                    dbFirebase.collection("config").doc("colores").set(coloresDefault);
+                    coloresDB = coloresDefault;
+                } else {
+                    coloresDB = d.data(); 
+                }
+                if(!primeraCarga) renderizarFuerte(); 
+            });
+
+            dbFirebase.collection("inventario").onSnapshot(s => {
+                if(s.empty) {
+                    mostrarToast("⏳ Inicializando base de datos en la nube...");
+                    datosBase.forEach(item => dbFirebase.collection("inventario").doc(item.id).set(item));
+                } else {
+                    inventario = []; 
+                    s.forEach(d => inventario.push({...d.data(), id: d.id})); 
+                    iniciarApp(true);
+                }
+            });
+        }
+    };
+
+    function iniciarApp(online) {
+        modelosUnicos = [...new Set(inventario.map(d => d.mod))].filter(m => m && !catalogComplementos.includes(m)).sort();
+        poblarFiltros(); renderizarFuerte(); renderPanelAjustes();
+        primeraCarga = false;
+    }
+
+    // BOTÓN DE INICIO GLOBAL: Vuelve al listado de CÉSPED y limpia todo
+    function resetPagina() {
+        const tabLista = document.querySelectorAll('.tab-btn')[0];
+        cambiarPestana('lista', tabLista);
+        
+        document.getElementById('f-estanteria').value = 'ALL';
+        document.getElementById('f-altura').value = 'ALL';
+        document.getElementById('f-busqueda').value = '';
+        
+        const btnCesped = document.getElementById('stat-cesped');
+        if (btnCesped) {
+            setFiltroEstado('CESPED', btnCesped);
+        } else {
+            filtroEstado = 'CESPED';
+            sortCol = 'ubi'; // Al resetear, forzamos orden por ubicación
+            sortAsc = true;
+            renderizarFuerte();
+        }
+    }
+
+    function getColorHex(m) { return coloresDB[m] || '#94a3b8'; }
+    function getColor(m, p) {
+        if(!m) return 'background:#fff; color:#94a3b8; border:1px dashed #cbd5e1;';
+        if(catalogComplementos.includes(m)) return 'background:var(--complementos-bg); color:var(--complementos-text); border:1px solid #cbd5e1;';
+        let bg = getColorHex(m);
+        return `background:${bg}; color:#fff; text-shadow:1px 1px 2px rgba(0,0,0,0.4); opacity:${p?0.85:1};`;
+    }
+
+    function preguntarDuplicar(ubi) {
+        if(confirm(`¿Añadir otro modelo en la ubicación ${ubi}?`)) {
+            const nuevoId = ubi + "_" + Date.now();
+            const nuevaFila = { id: nuevoId, ubi: ubi, mod: "", par: "", can: 0, est: "Vacio" };
+            if(modoOffline) { inventario.push(nuevaFila); renderizarFuerte(); }
+            else { dbFirebase.collection("inventario").doc(nuevoId).set(nuevaFila); }
+        }
+    }
+
+    async function sincronizarERP() {
+        const btn = document.querySelector('.btn-sync');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '⏳ Sincronizando...';
+        
+        const URL_WEB_APP = "https://script.google.com/macros/s/AKfycbwY5w1BUpgp5SZWqR1pyIjk8DrLlwnJa6VagoNP3MZtH_x7ORfn1oFRpKiCIIPe5Z4GIg/exec";
+        
+        try {
+            const response = await fetch(URL_WEB_APP, { redirect: 'follow' });
+            if (!response.ok) throw new Error('Error en la red');
+            
+            const datos = await response.json();
+            bdRetales = datos.retales || {};
+            bdOdoo = datos.odoo || {};
+            
+            btn.innerHTML = '✅ Conectado';
+            mostrarToast("Excel sincronizado con éxito");
+            renderizarFuerte(); 
+            setTimeout(() => btn.innerHTML = originalText, 2000);
+        } catch (error) {
+            btn.innerHTML = '❌ Error';
+            mostrarToast("Fallo de conexión. Comprueba permisos del Script.");
+            console.error(error);
+            setTimeout(() => btn.innerHTML = originalText, 3000);
+        }
+    }
+
+    function renderizarFuerte() {
+        const est = document.getElementById('f-estanteria').value;
+        const alt = document.getElementById('f-altura').value;
+        const busRaw = document.getElementById('f-busqueda').value.toUpperCase().trim();
+        const modoTodos = (busRaw === 'TODOS' || busRaw === 'ALL' || busRaw === '*');
+        const bus = modoTodos ? '' : busRaw;
+
+        const thMod = document.getElementById('th-mod');
+        const thPar = document.getElementById('th-par');
+        if (filtroEstado === 'Complementos') { thMod.innerText = 'Producto ↕️'; thPar.innerText = 'Lote ↕️'; } 
+        else { thMod.innerText = 'Modelo ↕️'; thPar.innerText = 'Partida ↕️'; }
+
+        let filtrados = inventario.filter(i => {
+            let pasaEstado = (filtroEstado === 'CESPED') ? (i.est !== 'Complementos') : (i.est === filtroEstado);
+            let ubiAlt = i.ubi ? i.ubi.substring(2,3) : ''; 
+            return pasaEstado && (est==='ALL'||i.ubi.startsWith(est)) && (alt==='ALL'||ubiAlt===alt) && (i.mod||'').toUpperCase().includes(bus);
+        });
+        
+        filtrados.sort((a,b) => {
+            let vA = a[sortCol], vB = b[sortCol];
+            if(sortCol==='can') { vA=Number(vA); vB=Number(vB); }
+            else { vA=(vA||'').toString().toLowerCase(); vB=(vB||'').toString().toLowerCase(); }
+            return sortAsc ? (vA < vB ? -1 : 1) : (vA > vB ? -1 : 1);
+        });
+
+        // --- AUDITORÍA GLOBAL O POR MODELO ---
+        let resumenHtml = '';
+        if ((busRaw.length > 0) && filtroEstado !== 'Complementos') {
+            let totalesFisico = {};
+            let poolParaAuditoria = modoTodos ? inventario.filter(x => x.est !== 'Complementos') : filtrados;
+
+            poolParaAuditoria.forEach(i => {
+                if (i.est === 'Vacio' || i.can <= 0 || !i.mod) return;
+                if (!totalesFisico[i.mod]) totalesFisico[i.mod] = {};
+                let p = i.par || 'S/P';
+                if (!totalesFisico[i.mod][p]) totalesFisico[i.mod][p] = 0;
+                totalesFisico[i.mod][p] += i.can;
+            });
+            
+            let todosLosModelos = new Set([...Object.keys(totalesFisico), ...Object.keys(bdRetales), ...Object.keys(bdOdoo)]);
+
+            Array.from(todosLosModelos).sort().forEach(m => {
+                if (!modoTodos && !m.toUpperCase().includes(bus)) return;
+                
+                let desglosePartidas = '';
+                let totalM2Modelo = 0;
+                let partidasSet = new Set();
+                if (totalesFisico[m]) Object.keys(totalesFisico[m]).forEach(p => partidasSet.add(p));
+                if (bdRetales[m]) Object.keys(bdRetales[m]).forEach(p => partidasSet.add(p));
+                if (bdOdoo[m]) Object.keys(bdOdoo[m]).forEach(p => partidasSet.add(p));
+                
+                Array.from(partidasSet).sort().forEach(p => {
+                    let rollos = (totalesFisico[m] && totalesFisico[m][p]) ? totalesFisico[m][p] : 0;
+                    let m2Fisico = rollos * 40;
+                    totalM2Modelo += m2Fisico;
+                    let m2Ret = (bdRetales[m] && bdRetales[m][p]) ? bdRetales[m][p] : 0;
+                    let m2Od = (bdOdoo[m] && bdOdoo[m][p]) ? bdOdoo[m][p] : 0;
+                    let totalReal = m2Fisico + m2Ret;
+                    let desc = totalReal - m2Od;
+                    desglosePartidas += `
+                        <div class="partida-bloque">
+                            <div class="partida-header"><span>PARTIDA: <b>${p}</b></span> <span>${rollos} rollos</span></div>
+                            <div class="partida-grid">
+                                <div class="pg-item"><span>Físico App</span><b>${m2Fisico} m²</b></div>
+                                <div class="pg-item"><span>+ Retales</span><b>${m2Ret} m²</b></div>
+                                <div class="pg-item" style="background:#f8fafc; border-left:2px solid #cbd5e1;"><span>Total Real</span><b>${totalReal} m²</b></div>
+                                <div class="pg-item"><span>ERP Odoo</span><b>${m2Od > 0 ? m2Od + ' m²' : '0 m²'}</b></div>
+                                <div class="pg-item"><span>Descuadre</span><b class="${desc===0?'descuadre-ok':'descuadre-warn'}">${m2Od>0?(desc>0?'+':'')+desc.toFixed(1)+' m²':'-'}</b></div>
+                            </div>
+                        </div>`;
+                });
+
+                if (desglosePartidas !== '') {
+                    resumenHtml += `
+                        <div class="card-auditoria">
+                            <div class="card-auditoria-header" style="background:${getColorHex(m)}">
+                                <span>${m}</span>
+                                <span style="font-size:14px; opacity:0.9;">Total Físico App: ${totalM2Modelo} m²</span>
+                            </div>
+                            <div class="card-auditoria-body">${desglosePartidas}</div>
+                        </div>`;
+                }
+            });
+        }
+        document.getElementById('resumen-partidas').innerHTML = resumenHtml;
+
+        const frag = document.createDocumentFragment();
+        filtrados.forEach(item => {
+            const tr = document.createElement('tr');
+            const parMod = [...new Set(inventario.filter(d => d.mod === item.mod).map(d => d.par))].filter(p => p);
+            tr.innerHTML = `
+                <td><span class="ubi-text" onclick="preguntarDuplicar('${item.ubi}')">${item.ubi}</span></td>
+                <td>${item.est==='Complementos'?`<input type='text' class='badge-select' list='lista-complementos' value='${item.mod}' onchange="guardarData('${item.id}','mod',this.value.toUpperCase())">`:`<select class='badge-select' style="${getColor(item.mod,false)}" onchange="guardarData('${item.id}','mod',this.value)"><option value="">-</option>${modelosUnicos.map(m=>`<option value="${m}" ${item.mod===m?'selected':''}>${m}</option>`).join('')}</select>`}</td>
+                <td><select class="badge-select" style="${getColor(item.mod,true)}" onchange="guardarPartida('${item.id}',this,'${item.est}')">
+                    <option value="${item.par}">${item.par||'--'}</option>
+                    ${parMod.map(p=>`<option value="${p}">${p}</option>`).join('')}
+                    <option value="NEW">+ Nuevo</option>
+                </select></td>
+                <td><input type="number" class="input-qty" value="${item.can}" onchange="guardarData('${item.id}','can',parseInt(this.value)||0)"></td>
+                <td><select class="badge-select est-${item.est}" onchange="cambiarEstado('${item.id}',this.value)">
+                    <option value="Completo" ${item.est==='Completo'?'selected':''}>Completo</option>
+                    <option value="Empezado" ${item.est==='Empezado'?'selected':''}>Empezado</option>
+                    <option value="Vacio" ${item.est==='Vacio'?'selected':''}>Vacio</option>
+                    <option value="Complementos" ${item.est==='Complementos'?'selected':''}>Complementos</option>
+                </select></td>
+                <td><button class="btn-action btn-del" onclick="eliminarFila('${item.id}')">🗑️</button></td>`;
+            frag.appendChild(tr);
+        });
+        const body = document.getElementById('tabla-body'); body.innerHTML = ''; body.appendChild(frag);
+        actualizarContadores(); renderMapaPanoramico();
+    }
+
+    function cambiarEstado(id, e) {
+        if(e === 'Vacio') { if(confirm("⚠️ ¿Vaciar? Se borrará modelo y cantidad.")) guardarMulti(id, { est: 'Vacio', mod: '', par: '', can: 0 }); else renderizarFuerte(); } 
+        else if (e === 'Complementos') guardarMulti(id, { est: 'Complementos', mod: '', par: '', can: 0 });
+        else guardarData(id, 'est', e);
+    }
+
+    function guardarPartida(id, sel, est) {
+        let v = sel.value;
+        if(v==='NEW') { v = prompt(est==='Complementos'?"Nuevo Lote:":"Nueva Partida:"); if(!v) { renderizarFuerte(); return; } }
+        guardarData(id, 'par', v.toUpperCase());
+    }
+
+    function guardarData(id, c, v) {
+        let i = inventario.find(x => x.id === id); if(i) i[c] = v;
+        if(!modoOffline) dbFirebase.collection("inventario").doc(id).update({[c]:v}).then(mostrarToast);
+        renderizarFuerte();
+    }
+
+    function guardarMulti(id, obj) {
+        let i = inventario.find(x => x.id === id); if(i) Object.assign(i, obj);
+        if(!modoOffline) dbFirebase.collection("inventario").doc(id).update(obj).then(mostrarToast);
+        renderizarFuerte();
+    }
+
+    function renderMapaPanoramico() {
+        const izq = document.getElementById('zona-izq'); if(izq) izq.innerHTML = '';
+        const c2 = document.getElementById('caja-est-2'); if(c2) c2.innerHTML = '';
+        const c3 = document.getElementById('caja-est-3'); if(c3) c3.innerHTML = '';
+        const c45 = document.getElementById('caja-est-45'); if(c45) c45.innerHTML = '';
+        const c6 = document.getElementById('caja-est-6'); if(c6) c6.innerHTML = '';
+        const aba = document.getElementById('zona-aba'); if(aba) aba.innerHTML = '';
+        let ests = {}; 
+        inventario.forEach(i => {
+            if(!i.ubi || i.ubi.length < 3) return; 
+            let e=i.ubi.substring(0,2), n=i.ubi.substring(2,3);
+            if(!ests[e]) ests[e]={}; if(!ests[e][n]) ests[e][n]=[]; ests[e][n].push(i);
+        });
+        Object.keys(ests).sort().forEach(e => {
+            let isVert = (e === '08' || e === '09' || e === '10');
+            let d = document.createElement('div'); d.className = 'estanteria'; d.innerHTML = `<h3>📍 Estantería ${e}</h3>`;
+            let cont = document.createElement('div'); cont.className = isVert ? 'contenedor-vertical' : 'contenedor-horizontal';
+            Object.keys(ests[e]).sort().reverse().forEach(n => {
+                let r = document.createElement('div'); r.className = isVert ? 'nivel-vert' : 'nivel-horiz'; r.innerHTML = `<b>${n}</b>`;
+                let ubiMap = {}; ests[e][n].forEach(h => { if(!ubiMap[h.ubi]) ubiMap[h.ubi]=[]; ubiMap[h.ubi].push(h); });
+                Object.keys(ubiMap).sort((a,b)=>isVert?b.localeCompare(a):a.localeCompare(b)).forEach(u => {
+                    let principal = ubiMap[u][0];
+                    r.innerHTML += `<div class="hueco map-${principal.est}" title="Ubi: ${u}"><span class="ubi">${u.substring(2)}</span><span class="mod">${principal.mod}</span>${principal.can>0?`<span class="can">${principal.can}</span>`:''}</div>`;
+                });
+                cont.appendChild(r);
+            });
+            d.appendChild(cont);
+            if(e==='08'||e==='09'||e==='10') { if(izq) izq.appendChild(d); }
+            else if(e==='02') { if(c2) c2.appendChild(d); }
+            else if(e==='03') { if(c3) c3.appendChild(d); }
+            else if(e==='04'||e==='05') { if(c45) c45.appendChild(d); }
+            else if(e==='06') { if(c6) c6.appendChild(d); }
+            else if(e==='07') { if(aba) aba.appendChild(d); }
+        });
+    }
+
+    function cambiarPestana(p, b) {
+        document.querySelectorAll('.vista').forEach(v=>v.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+        document.getElementById('vista-'+p).classList.add('active'); b.classList.add('active');
+        if (p === 'mapa') renderMapaPanoramico();
+    }
+
+    function setFiltroEstado(e, b) {
+        filtroEstado = e; 
+        document.querySelectorAll('.stat-card').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active'); 
+        
+        // Ordenación automática según la tarjeta seleccionada
+        if (e === 'CESPED' || e === 'Vacio') {
+            sortCol = 'ubi';
+            sortAsc = true;
+        } else if (e === 'Empezado' || e === 'Completo') {
+            sortCol = 'mod';
+            sortAsc = true;
+        }
+
+        renderizarFuerte();
+    }
+
+    function ordenarTabla(c) { if(sortCol===c) sortAsc=!sortAsc; else {sortCol=c; sortAsc=true;} renderizarFuerte(); }
+
+    function poblarFiltros() {
+        const ests = [...new Set(inventario.filter(d=>d.ubi).map(d => d.ubi.substring(0,2)))].sort();
+        const alts = ["A", "B", "C"]; // SOLO ALTURAS A, B, C FORZADAS
+        const sE = document.getElementById('f-estanteria'), sA = document.getElementById('f-altura');
+        if(sE.options.length<=1) ests.forEach(e=>sE.innerHTML+=`<option value="${e}">Estante ${e}</option>`);
+        if(sA.options.length<=1) alts.forEach(a=>sA.innerHTML+=`<option value="${a}">Nivel ${a}</option>`);
+    }
+
+    function actualizarContadores() {
+        document.getElementById('count-cesped').innerText = inventario.filter(d => d.est !== 'Complementos').length;
+        document.getElementById('count-emp').innerText = inventario.filter(d => d.est === 'Empezado').length;
+        document.getElementById('count-com').innerText = inventario.filter(d => d.est === 'Completo').length;
+        document.getElementById('count-vac').innerText = inventario.filter(d => d.est === 'Vacio').length;
+        document.getElementById('count-comp').innerText = inventario.filter(d => d.est === 'Complementos').length;
+    }
+
+    function renderPanelAjustes() {
+        const g = document.getElementById('grid-colores'); g.innerHTML = '';
+        modelosUnicos.forEach(m => {
+            g.innerHTML += `<div class="color-row"><div class="preview-badge" style="background:${coloresDB[m]||'#94a3b8'}">${m}</div><input type="color" value="${coloresDB[m]||'#94a3b8'}" onchange="saveCol('${m}',this.value)" title="Cambiar color"></div>`;
+        });
+    }
+
+    function saveCol(m, c) { coloresDB[m]=c; if(!modoOffline) dbFirebase.collection("config").doc("colores").update({[m]:c}); renderizarFuerte(); renderPanelAjustes(); }
+    function mostrarToast(msg = "✅ Guardado") { const t=document.getElementById('toast'); t.innerText=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',1500); }
+    function eliminarFila(id) { if(confirm("¿Eliminar?")) { if(modoOffline) { inventario=inventario.filter(x=>x.id!==id); renderizarFuerte(); } else { dbFirebase.collection("inventario").doc(id).delete(); } } }
+    function preguntarDuplicar(u) { if(confirm("¿Añadir otro modelo aquí?")) { let nId=u+"_"+Date.now(); let nF={id:nId,ubi:u,mod:"",par:"",can:0,est:"Vacio"}; if(modoOffline){inventario.push(nF);renderizarFuerte();}else{dbFirebase.collection("inventario").doc(nId).set(nF);} } }
+</script>
+</body>
+</html>
